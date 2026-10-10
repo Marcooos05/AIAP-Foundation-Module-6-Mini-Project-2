@@ -1,0 +1,19 @@
+# Data (external input — see README)
+data/
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Generated artifacts
+models/
+.pytest_cache/
