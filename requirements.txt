@@ -5,3 +5,4 @@ pandas==3.0.3
 PyYAML==6.0.3
 scikit-learn==1.8.0
 scipy==1.17.1
+imbalanced-learn==0.14.2

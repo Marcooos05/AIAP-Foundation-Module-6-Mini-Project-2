@@ -369,6 +369,8 @@ class RoomPriceImputer(BaseEstimator, TransformerMixin):
         # Rooms first (they need the real price); rows missing both get the branch's usual room.
         missing_room = X['room'].isna()
         if missing_room.any():
+            if not (pd.api.types.is_object_dtype(X['room']) or pd.api.types.is_string_dtype(X['room'])):
+                X['room'] = X['room'].astype(object)  # an all-missing column is read as float
             X.loc[missing_room, 'room'] = [
                 self._room_from_price(branch, price)
                 for branch, price in zip(X.loc[missing_room, 'branch'], X.loc[missing_room, 'price_sgd'])

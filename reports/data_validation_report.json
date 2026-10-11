@@ -1,0 +1,43 @@
+{
+  "n_rows": 119391,
+  "n_columns": 15,
+  "missing_values_per_column": {
+    "no_show": 1,
+    "branch": 1,
+    "booking_month": 1,
+    "arrival_month": 1,
+    "arrival_day": 1,
+    "checkout_month": 1,
+    "checkout_day": 1,
+    "country": 1,
+    "first_time": 1,
+    "room": 21613,
+    "price": 24882,
+    "platform": 1,
+    "num_adults": 1,
+    "num_children": 1
+  },
+  "n_duplicate_rows": 0,
+  "n_duplicate_booking_ids": 0,
+  "n_non_title_case_values": {
+    "branch": 0,
+    "booking_month": 0,
+    "arrival_month": 1613,
+    "checkout_month": 0,
+    "country": 0,
+    "first_time": 0,
+    "room": 0,
+    "platform": 0
+  },
+  "n_word_num_adults": 11402,
+  "n_negative_checkout_day": 5696,
+  "price_currency_counts": {
+    "SGD": 47295,
+    "USD": 47214
+  },
+  "target_distribution": {
+    "0.0": 75166,
+    "1.0": 44224,
+    "nan": 1
+  }
+}

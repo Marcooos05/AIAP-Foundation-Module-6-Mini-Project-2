@@ -1,3 +1,5 @@
+"""Entry point: run the end-to-end no-show classification pipeline."""
+
 import json
 import logging
 import time
@@ -7,13 +9,14 @@ from typing import Any, Dict, Tuple
 import joblib
 import pandas as pd
 import yaml
-from sklearn.pipeline import Pipeline
+from imblearn.pipeline import Pipeline
 
 from src.config_validation import validate_config
 from src.data_preparation import DataPreparation
 from src.evaluation import (
     classification_report_dict,
     plot_confusion_matrix,
+    plot_model_comparison,
     plot_precision_recall_curves,
     plot_roc_curves,
 )
@@ -26,6 +29,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = Path('./src/config.yaml')
+CLASS_LABELS = ['Show', 'No-show']
 MODELS_DIR = Path('models')
 REPORTS_DIR = Path('reports')
 FIGURES_DIR = REPORTS_DIR / 'figures'
@@ -95,6 +99,7 @@ def _persist_artifacts(
     final_metrics: Dict[str, Any],
     best_model_name: str,
     best_model_metrics: Dict[str, Any],
+    threshold: Dict[str, float],
     feature_importance: Dict[str, Dict[str, float]],
 ) -> None:
     """Saves the final model and its accompanying reports to disk."""
@@ -103,7 +108,9 @@ def _persist_artifacts(
     _save_json(
         {
             'model_name': best_model_name,
+            'imbalance_strategy': best_model_metrics.get('imbalance_strategy'),
             'hyperparameters': best_model_metrics.get('best_params', {}),
+            'decision_threshold': threshold,
         },
         REPORTS_DIR / 'selected_hyperparameters.json',
     )
@@ -119,13 +126,18 @@ def main():
     2. Load the raw dataset and verify required columns are present.
     3. Generate a data validation report, then clean the data and engineer features.
     4. Split into stratified train/validation/test sets.
-    5. Train and evaluate baseline models, then hyperparameter-tuned models,
-       and plot every model's validation ROC and precision-recall curves.
+    5. Train and evaluate baseline models, then tune Logistic Regression, KNN,
+       Decision Tree, Random Forest and Gradient Boosting, comparing the
+       imbalance strategies (none / class weights / undersampling /
+       oversampling) inside each grid search. Plot every model's validation
+       scores, ROC and precision-recall curves.
     6. Select the best model by validation score (ROC-AUC by default).
-    7. Refit the best model on train+validation data and evaluate it on the
-       test set (metrics, classification report, ROC / PR curves, confusion matrix).
-    8. Compute permutation feature importance for the final model.
-    9. Persist the final model and all reports to disk.
+    7. Tune its decision threshold on the validation set (best no-show F1).
+    8. Refit the best model on train+validation data and evaluate it on the
+       test set at 0.5 and at the tuned threshold (metrics, classification
+       report, ROC / PR curves, confusion matrix), next to the dummy baseline.
+    9. Compute permutation feature importance for the final model.
+    10. Persist the final model and all reports to disk.
     """
     MODELS_DIR.mkdir(exist_ok=True)
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
@@ -167,24 +179,32 @@ def main():
     all_models = {**baseline_models, **tuned_models}
     all_metrics = {**baseline_metrics, **tuned_metrics}
     _save_json(all_metrics, REPORTS_DIR / 'validation_metrics.json')
+    plot_model_comparison(all_metrics, FIGURES_DIR / 'model_comparison_validation.png')
     plot_roc_curves(all_models, X_val, y_val, FIGURES_DIR / 'roc_curves_validation.png')
     plot_precision_recall_curves(all_models, X_val, y_val, FIGURES_DIR / 'pr_curves_validation.png')
 
     best_model_name, best_model = _select_best_model(all_models, all_metrics, config['scoring'])
+    threshold = model_training.tune_threshold(best_model, X_val, y_val)
 
     start = time.perf_counter()
     refit_model = model_training.refit_on_train_val(best_model, X_train, X_val, y_train, y_val)
-    final_metrics = model_training.evaluate_final_model(refit_model, X_test, y_test, best_model_name)
+    test_at_tuned = model_training.evaluate_final_model(
+        refit_model, X_test, y_test, best_model_name, threshold['threshold'],
+    )
+    test_at_default = model_training.evaluate_final_model(refit_model, X_test, y_test, best_model_name)
     logger.info("Final refit and evaluation completed in %.2fs.", time.perf_counter() - start)
 
-    positive_class = str(config['positive_class'])
-    other_classes = sorted({str(label) for label in df_cleaned[config['target_column']]} - {positive_class})
-    negative_label = other_classes[0] if len(other_classes) == 1 else f'Not {positive_class}'
-    class_labels = [negative_label, positive_class]
     final_metrics = {
         'model_name': best_model_name,
-        **final_metrics,
-        'classification_report': classification_report_dict(refit_model, X_test, y_test, class_labels),
+        'imbalance_strategy': all_metrics[best_model_name]['imbalance_strategy'],
+        'test_at_tuned_threshold': test_at_tuned,
+        'test_at_default_threshold': test_at_default,
+        'classification_report_tuned_threshold': classification_report_dict(
+            refit_model, X_test, y_test, CLASS_LABELS, threshold['threshold'],
+        ),
+        'dummy_most_frequent_test': model_training.evaluate_final_model(
+            baseline_models['dummy_most_frequent'], X_test, y_test, 'dummy_most_frequent',
+        ),
     }
     plot_roc_curves({best_model_name: refit_model}, X_test, y_test, FIGURES_DIR / 'roc_curve_test.png')
     plot_precision_recall_curves(
@@ -192,7 +212,8 @@ def main():
     )
     plot_confusion_matrix(
         refit_model, X_test, y_test, FIGURES_DIR / 'confusion_matrix_test.png',
-        labels=class_labels, title=f'Confusion matrix (test set): {best_model_name}',
+        labels=CLASS_LABELS, threshold=threshold['threshold'],
+        title=f"Confusion matrix (test set): {best_model_name}, threshold {threshold['threshold']:.2f}",
     )
 
     start = time.perf_counter()
@@ -200,7 +221,7 @@ def main():
     logger.info("Permutation importance completed in %.2fs.", time.perf_counter() - start)
 
     _persist_artifacts(
-        refit_model, final_metrics, best_model_name, all_metrics[best_model_name], feature_importance,
+        refit_model, final_metrics, best_model_name, all_metrics[best_model_name], threshold, feature_importance,
     )
 
 

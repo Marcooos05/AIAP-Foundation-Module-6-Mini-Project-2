@@ -1,0 +1,15 @@
+{
+  "model_name": "random_forest",
+  "imbalance_strategy": "class_weight",
+  "hyperparameters": {
+    "classifier__class_weight": "balanced",
+    "classifier__max_depth": 20,
+    "classifier__min_samples_leaf": 10,
+    "classifier__n_estimators": 200
+  },
+  "decision_threshold": {
+    "threshold": 0.42,
+    "validation_f1": 0.6474125184820109,
+    "validation_f1_at_0.5": 0.6433171393062931
+  }
+}

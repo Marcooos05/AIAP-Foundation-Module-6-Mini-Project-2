@@ -50,9 +50,16 @@ def test_invalid_n_jobs_raises(base_config, value):
         validate_config(base_config)
 
 
-def test_invalid_class_weight_raises(base_config):
-    base_config["class_weight"] = "balanced_subsample"
-    with pytest.raises(ValueError, match="class_weight"):
+@pytest.mark.parametrize("value", [[], ["smote"]])
+def test_invalid_imbalance_strategies_raises(base_config, value):
+    base_config["imbalance_strategies"] = value
+    with pytest.raises(ValueError, match="imbalance_strategies"):
+        validate_config(base_config)
+
+
+def test_non_positive_exchange_rate_raises(base_config):
+    base_config["usd_to_sgd"] = 0
+    with pytest.raises(ValueError, match="usd_to_sgd"):
         validate_config(base_config)
 
 
@@ -63,7 +70,7 @@ def test_onehot_min_frequency_below_one_raises(base_config):
 
 
 def test_feature_list_with_non_string_raises(base_config):
-    base_config["numeric_features"] = ["num_a", 123]
+    base_config["numeric_features"] = ["stay_nights", 123]
     with pytest.raises(ValueError, match="numeric_features"):
         validate_config(base_config)
 
@@ -76,20 +83,20 @@ def test_no_features_raises(base_config):
 
 
 def test_feature_in_two_roles_raises(base_config):
-    base_config["ordinal_features"] = ["cat_a"]
-    base_config["ordinal_categories"]["cat_a"] = ["red"]
+    base_config["ordinal_features"] = ["room"]
+    base_config["ordinal_categories"]["room"] = ["Single", "Queen", "King"]
     with pytest.raises(ValueError, match="listed in both"):
         validate_config(base_config)
 
 
 def test_dropped_feature_raises(base_config):
-    base_config["columns_to_drop"] = ["num_a"]
+    base_config["columns_to_drop"] = ["stay_nights"]
     with pytest.raises(ValueError, match="columns_to_drop"):
         validate_config(base_config)
 
 
 def test_target_as_feature_raises(base_config):
-    base_config["numeric_features"].append("target")
+    base_config["numeric_features"].append("no_show")
     with pytest.raises(ValueError, match="Target column"):
         validate_config(base_config)
 
@@ -102,6 +109,7 @@ def test_ordinal_feature_without_categories_raises(base_config):
 
 def test_ordinal_feature_with_categories_passes(base_config):
     base_config["ordinal_features"] = ["size"]
+    base_config["ordinal_categories"]["size"] = ["S", "M", "L"]
     validate_config(base_config)
 
 

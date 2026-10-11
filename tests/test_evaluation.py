@@ -61,9 +61,20 @@ def test_compute_metrics_returns_expected_values(known_case):
     assert metrics["confusion_matrix"] == [[2, 1], [1, 2]]
 
 
+def test_compute_metrics_uses_threshold(known_case):
+    model, X, y = known_case
+    metrics = compute_metrics(model, X, y, threshold=0.35)
+    # Scores >= 0.35: 0.9, 0.8, 0.4, 0.6 -> TP=3, FP=1, TN=2, FN=0.
+    assert metrics["threshold"] == 0.35
+    assert metrics["recall"] == pytest.approx(1.0)
+    assert metrics["precision"] == pytest.approx(3 / 4)
+    assert metrics["confusion_matrix"] == [[2, 1], [0, 3]]
+    assert metrics["roc_auc"] == pytest.approx(8 / 9)  # unchanged by the threshold
+
+
 def test_compute_metrics_handles_no_positive_predictions():
     y = pd.Series([1, 0, 1, 0])
-    model = FixedPredictionModel(y_pred=[0, 0, 0, 0], y_score=[0.5, 0.5, 0.5, 0.5])
+    model = FixedPredictionModel(y_pred=[0, 0, 0, 0], y_score=[0.4, 0.4, 0.4, 0.4])
     metrics = compute_metrics(model, pd.DataFrame({"x": range(4)}), y)
     assert metrics["precision"] == 0.0
     assert metrics["roc_auc"] == pytest.approx(0.5)
